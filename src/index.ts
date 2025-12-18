@@ -16,7 +16,7 @@ export default {
 		const url = new URL(request.url);
 
 		// =========================
-		// Endpoint de prueba simple
+		// Ping (ya funciona)
 		// =========================
 		if (url.pathname === "/ping") {
 			return new Response(
@@ -25,9 +25,23 @@ export default {
 					service: "openauth-worker",
 				}),
 				{
-					headers: {
-						"content-type": "application/json",
-					},
+					headers: { "content-type": "application/json" },
+				},
+			);
+		}
+
+		// =========================
+		// CALLBACK OAuth (EVITA 404)
+		// =========================
+		if (url.pathname === "/callback") {
+			return new Response(
+				JSON.stringify({
+					status: "ok",
+					message: "OAuth flow complete",
+					params: Object.fromEntries(url.searchParams.entries()),
+				}),
+				{
+					headers: { "content-type": "application/json" },
 				},
 			);
 		}
@@ -44,7 +58,6 @@ export default {
 				password: PasswordProvider(
 					PasswordUI({
 						sendCode: async (email, code) => {
-							// En producción aquí envías el email
 							console.log(`Sending code ${code} to ${email}`);
 						},
 						copy: {
