@@ -5,59 +5,70 @@ import { PasswordUI } from "@openauthjs/openauth/ui/password";
 import { createSubjects } from "@openauthjs/openauth/subject";
 import { object, string } from "valibot";
 
+/**
+ * =========================
+ * SUBJECTS
+ * =========================
+ */
 const subjects = createSubjects({
 	user: object({
 		id: string(),
 	}),
 });
 
+/**
+ * =========================
+ * WORKER
+ * =========================
+ */
 export default {
 	async fetch(request: Request, env: Env, ctx: ExecutionContext) {
 		const url = new URL(request.url);
 
-		// =========================
-		// Ping (ya funciona)
-		// =========================
+		/**
+		 * -------------------------
+		 * PING (verificación simple)
+		 * -------------------------
+		 */
 		if (url.pathname === "/ping") {
 			return new Response(
 				JSON.stringify({
 					status: "ok",
 					service: "openauth-worker",
 				}),
-				{
-					headers: { "content-type": "application/json" },
-				},
+				{ headers: { "content-type": "application/json" } },
 			);
 		}
 
-		// =========================
-		// CALLBACK OAuth (EVITA 404)
-		// =========================
-		if (url.pathname === "/callback") {
-			return new Response(
-				JSON.stringify({
-					status: "ok",
-					message: "OAuth flow complete",
-					params: Object.fromEntries(url.searchParams.entries()),
-				}),
-				{
-					headers: { "content-type": "application/json" },
-				},
-			);
-		}
-
-		// =========================
-		// OpenAuth server real
-		// =========================
+		/**
+		 * -------------------------
+		 * OPENAUTH SERVER
+		 * -------------------------
+		 */
 		return issuer({
+			// Storage
 			storage: CloudflareStorage({
 				namespace: env.AUTH_STORAGE,
 			}),
+
+			// Subjects
 			subjects,
+
+			// 🔐 CLIENTES OAUTH (ESTO ES CLAVE)
+			clients: {
+				"mpe-web": {
+					redirect_uris: [
+						"https://chiletelco.com/auth/callback.php",
+					],
+				},
+			},
+
+			// Providers
 			providers: {
 				password: PasswordProvider(
 					PasswordUI({
 						sendCode: async (email, code) => {
+							// En producción aquí envías el correo
 							console.log(`Sending code ${code} to ${email}`);
 						},
 						copy: {
@@ -66,6 +77,8 @@ export default {
 					}),
 				),
 			},
+
+			// UI Theme
 			theme: {
 				title: "myAuth",
 				primary: "#0051c3",
@@ -76,6 +89,8 @@ export default {
 						"https://imagedelivery.net/wSMYJvS3Xw-n339CbDyDIA/fa5a3023-7da9-466b-98a7-4ce01ee6c700/public",
 				},
 			},
+
+			// Success
 			success: async (ctx, value) => {
 				return ctx.subject("user", {
 					id: await getOrCreateUser(env, value.email),
@@ -85,6 +100,11 @@ export default {
 	},
 } satisfies ExportedHandler<Env>;
 
+/**
+ * =========================
+ * DB
+ * =========================
+ */
 async function getOrCreateUser(env: Env, email: string): Promise<string> {
 	const result = await env.AUTH_DB.prepare(
 		`
